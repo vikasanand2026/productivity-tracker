@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Developer Productivity Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; }
+
+.header { background: #1e3a5f; color: #fff; padding: 0 24px; display: flex; align-items: center; gap: 14px; height: 60px; box-shadow: 0 2px 8px rgba(0,0,0,0.18); position: sticky; top: 0; z-index: 200; }
+.header-icon { font-size: 20px; background: #2563eb; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.header-title { font-size: 16px; font-weight: 700; }
+.header-sub { font-size: 11px; color: #93c5fd; margin-top: 1px; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.db-badge { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
+.db-dot { width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; transition: background .3s; }
+.db-dot.live { background: #4ade80; }
+.db-dot.error { background: #ef4444; }
+
+.tab-nav { background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; position: sticky; top: 60px; z-index: 190; }
+.tab-nav-btn { padding: 13px 22px; font-size: 13px; font-weight: 600; color: #64748b; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 7px; }
+.tab-nav-btn:hover { color: #1e3a5f; background: #f8fafc; }
+.tab-nav-btn.active { color: #1d4ed8; border-bottom-color: #1d4ed8; background: #f0f7ff; }
+.tab-nav-btn .badge { background: #e0e7ff; color: #3730a3; border-radius: 10px; padding: 1px 7px; font-size: 11px; }
+.tab-nav-btn.active .badge { background: #1d4ed8; color: #fff; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ENTRY PANEL */
+.entry-layout { display: flex; min-height: calc(100vh - 110px); }
+.sidebar { width: 210px; flex-shrink: 0; background: #fff; border-right: 1px solid #e2e8f0; padding: 14px 10px 100px; overflow-y: auto; position: sticky; top: 110px; height: calc(100vh - 110px); }
+.sidebar-label { font-size: 10px; font-weight: 700; color: #94a3b8; letter-spacing: .08em; text-transform: uppercase; padding: 0 6px; margin-bottom: 8px; }
+.tab-item { padding: 9px 10px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; transition: background .12s; }
+.tab-item:hover { background: #f1f5f9; }
+.tab-item.active { background: #eff6ff; border-color: #bfdbfe; }
+.tab-name { font-size: 13px; font-weight: 600; color: #334155; }
+.tab-item.active .tab-name { color: #1d4ed8; }
+.tab-dev { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.tab-remove { background: none; border: none; cursor: pointer; color: #cbd5e1; font-size: 17px; line-height: 1; padding: 0 3px; border-radius: 4px; }
+.tab-remove:hover { color: #ef4444; background: #fee2e2; }
+.btn-add-tab { width: 100%; margin-top: 6px; padding: 8px; border: 1.5px dashed #bfdbfe; background: #f8faff; color: #2563eb; font-size: 13px; font-weight: 600; border-radius: 7px; cursor: pointer; }
+.btn-add-tab:hover { background: #eff6ff; }
+.main-form { flex: 1; padding: 22px 26px 120px; overflow-y: auto; }
+
+.section-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 18px; overflow: hidden; }
+.section-head { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-bottom: 1px solid #f1f5f9; }
+.section-bar { width: 4px; height: 18px; border-radius: 2px; flex-shrink: 0; }
+.section-title { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #475569; }
+.fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 15px; padding: 18px; }
+.field-full { grid-column: 1 / -1; }
+
+.field label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px; }
+.field label .req { color: #ef4444; margin-left: 2px; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 13px; color: #1e293b; background: #f8fafc; font-family: inherit; outline: none; transition: border-color .15s, box-shadow .15s; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); background: #fff; }
+.field textarea { resize: vertical; min-height: 66px; }
+.field .err-msg { font-size: 11px; color: #ef4444; margin-top: 4px; display: none; }
+.field.has-error input, .field.has-error select, .field.has-error textarea { border-color: #ef4444; background: #fff8f8; }
+.field.has-error label { color: #ef4444; }
+.field.has-error .err-msg { display: block; }
+.field-hidden { display: none; }
+
+.summary-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: none; }
+.summary-card.visible { display: block; }
+.summary-label { font-size: 11px; font-weight: 700; color: #2563eb; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 10px; }
+.summary-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.stat { text-align: center; }
+.stat-val { font-size: 19px; font-weight: 700; color: #1e40af; }
+.stat-val.positive { color: #16a34a; }
+.stat-name { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e2e8f0; padding: 11px 26px; display: flex; justify-content: space-between; align-items: center; z-index: 100; box-shadow: 0 -2px 12px rgba(0,0,0,0.07); }
+.bar-info { font-size: 13px; color: #64748b; }
+.bar-actions { display: flex; gap: 8px; }
+.btn { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .12s; display: flex; align-items: center; gap: 6px; }
+.btn-ghost { background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; }
+.btn-ghost:hover { background: #e2e8f0; }
+.btn-primary { background: #1d4ed8; color: #fff; box-shadow: 0 2px 8px rgba(29,78,216,.25); }
+.btn-primary:hover { background: #1e40af; }
+.btn-green { background: #16a34a; color: #fff; }
+.btn-green:hover { background: #15803d; }
+.btn-red { background: #ef4444; color: #fff; }
+.btn-red:hover { background: #dc2626; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* SEARCH PANEL */
+.search-panel { padding: 24px 28px 100px; }
+.search-bar { display: flex; gap: 10px; margin-bottom: 22px; align-items: center; flex-wrap: wrap; }
+.search-bar input { flex: 1; min-width: 200px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
+.search-bar input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+.search-bar select { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; outline: none; background: #fff; color: #334155; }
+.btn-search { padding: 10px 22px; background: #1d4ed8; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.btn-search:hover { background: #1e40af; }
+
+.results-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.results-head { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.results-title { font-size: 13px; font-weight: 700; color: #334155; }
+.results-count { font-size: 12px; color: #64748b; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead tr { background: #1e3a5f; color: #fff; }
+thead th { padding: 11px 14px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
+tbody tr:hover { background: #f8fafc; }
+tbody td { padding: 10px 14px; color: #334155; vertical-align: middle; }
+.td-actions { display: flex; gap: 6px; }
+.btn-edit { padding: 5px 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn-edit:hover { background: #dbeafe; }
+.btn-del { padding: 5px 10px; background: #fef2f2; border: 1px solid #fecaca; color: #ef4444; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-del:hover { background: #fee2e2; }
+.empty-state { text-align: center; padding: 48px 20px; color: #94a3b8; }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+.empty-text { font-size: 14px; }
+
+/* EDIT MODAL */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px; }
+.modal-overlay.open { display: flex; }
+.modal { background: #fff; border-radius: 16px; width: 780px; max-width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-header { padding: 20px 24px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 16px; font-weight: 700; color: #1e293b; }
+.modal-close { background: none; border: none; font-size: 22px; color: #94a3b8; cursor: pointer; line-height: 1; }
+.modal-close:hover { color: #334155; }
+.modal-body { padding: 20px 24px; max-height: 70vh; overflow-y: auto; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px; }
+
+.spinner-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.75); z-index: 600; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+.spinner-overlay.open { display: flex; }
+.spinner { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #1d4ed8; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner-msg { font-size: 14px; font-weight: 600; color: #334155; }
+
+.toast { position: fixed; bottom: 70px; right: 22px; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.15); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 700; max-width: 360px; }
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) { .sidebar { display: none; } .fields-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-icon">📊</div>
+  <div>
+    <div class="header-title">Developer Productivity Tracker</div>
+    <div class="header-sub">Supabase · Search & Edit · Excel Export</div>
+  </div>
+  <div class="header-right">
+    <div class="db-badge"><div class="db-dot" id="dbDot"></div><span id="dbStatus">Connecting…</span></div>
+  </div>
+</div>
+
+<!-- TAB NAV -->
+<div class="tab-nav">
+  <button class="tab-nav-btn active" onclick="switchTab('entry')" id="navEntry">✏️ New Entry</button>
+  <button class="tab-nav-btn" onclick="switchTab('search')" id="navSearch">🔍 Search & Edit <span class="badge" id="totalBadge">0</span></button>
+</div>
+
+<!-- ENTRY PANEL -->
+<div class="panel active" id="panelEntry">
+  <div class="entry-layout">
+    <div class="sidebar">
+      <div class="sidebar-label">This Session</div>
+      <div id="tabList"></div>
+      <button class="btn-add-tab" onclick="addEntry()">+ Add Entry</button>
+    </div>
+    <div class="main-form" id="mainArea"></div>
+  </div>
+</div>
+
+<!-- SEARCH PANEL -->
+<div class="panel" id="panelSearch">
+  <div class="search-panel">
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search by Developer name or JIRA Story number…" onkeydown="if(event.key==='Enter') doSearch()">
+      <select id="searchField">
+        <option value="all">All fields</option>
+        <option value="developer">Developer</option>
+        <option value="jira_story">JIRA Story</option>
+        <option value="division">Division</option>
+        <option value="story_task">Story/Task</option>
+      </select>
+      <button class="btn-search" onclick="doSearch()">🔍 Search</button>
+      <button class="btn btn-ghost" onclick="loadAllRecords()">Show All</button>
+    </div>
+    <div class="results-wrap">
+      <div class="results-head">
+        <div class="results-title">Records</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span class="results-count" id="resultsCount">—</span>
+          <button class="btn btn-green" onclick="exportAllToExcel()" style="padding:6px 14px;font-size:12px;">⬇ Export All to Excel</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Division</th><th>JIRA Story</th><th>Story/Task</th>
+              <th>Developer</th><th>Build Tool</th><th>Story Pts</th>
+              <th>Code Gen Hrs</th><th>Review Hrs</th><th>Analysis Tool</th><th>Created</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Search for records or click "Show All"</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <div class="bar-info" id="barInfo">0 entries this session</div>
+  <div class="bar-actions">
+    <button class="btn btn-ghost" onclick="addEntry()">+ Add Entry</button>
+    <button class="btn btn-ghost" onclick="exportAllToExcel()">⬇ Export All to Excel</button>
+    <button class="btn btn-primary" id="btnSave" onclick="saveToSupabase()" disabled>☁ Save to Supabase</button>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Edit Record</div>
+      <button class="modal-close" onclick="closeEditModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPINNER -->
+<div class="spinner-overlay" id="spinnerOverlay">
+  <div class="spinner"></div>
+  <div class="spinner-msg" id="spinnerMsg">Saving…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ══════════════════════════════════════════════════════
+const SB_URL  = 'https://anhiwsasndcxqaszjcwa.supabase.co';
+const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGl3c2FzbmRjeHFhc3pqY3dhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MTU1NjMsImV4cCI6MjEwMzM5MTU2M30.R82pdhvtBpiKviUDg3Bgq7_pdDJ9-C3NkQoU_rOZIV0';
+const TABLE   = 'productivity_entries';
+const HEADERS = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+
+async function sbFetch(path, options={}) {
+  const res = await fetch(SB_URL + '/rest/v1/' + path, { ...options, headers: { ...HEADERS, ...(options.headers||{}) } });
+  if (!res.ok) { const err = await res.json().catch(()=>({message:res.statusText})); throw new Error(err.message || res.statusText); }
+  return res.status === 204 ? null : res.json();
+}
+
+// ══════════════════════════════════════════════════════
+// DATA DEFINITIONS
+// ══════════════════════════════════════════════════════
+const TOOLS = ['Copado AI','Agentforce','Chat GPT','None'];
+const DIVISIONS = ['LATAM','PINNACLE','RMSALES','WATCHMAN','Educare EMEA','NMD','PCM AXNX','GSMS','EDUCAREUS','ICGMA(PI/CT/SH/BP/Innovation Center)','MCL','EUFCS','EUSALES','CIPI','RM Service','GFIM','Endo','Uro Sales','ENH','APAC'];
+const STORY_TASK_OPTS = ['Story','Spike','Task'];
+
+const FIELDS = [
+  { key:'division',          label:'Division',                                        type:'select',   opts:DIVISIONS,       req:true,  section:'story', db:'division' },
+  { key:'jiraStory',         label:'JIRA Story',                                      type:'text',                           req:true,  section:'story', db:'jira_story' },
+  { key:'storyTask',         label:'Story / Task',                                    type:'select',   opts:STORY_TASK_OPTS, req:true,  section:'story', db:'story_task' },
+  { key:'storyPoints',       label:'JIRA Story Points',                               type:'number',                         req:false, section:'story', db:'story_points' },
+  { key:'developer',         label:'Developer',                                        type:'text',                           req:true,  section:'story', db:'developer' },
+  { key:'buildTool',         label:'Productivity Tool Used for Build',                type:'select',   opts:TOOLS,           req:true,  section:'build', db:'build_tool' },
+  { key:'buildJustify',      label:'Justification for Not Using Productivity Tool',   type:'textarea', req:true,  section:'build', db:'build_justify', showWhen:r=>r.buildTool==='None', full:true },
+  { key:'codeGenHours',      label:'Code Generation Hours',                           type:'number',   req:false, section:'build', db:'code_gen_hours' },
+  { key:'reviewHours',       label:'Review Hours',                                    type:'number',   req:false, section:'build', db:'review_hours' },
+  { key:'refinementHours',   label:'Refinement Hours',                                type:'number',   req:false, section:'build', db:'refinement_hours' },
+  { key:'remediationHours',  label:'Addtnl Remediation Hours (Manual + Unit Testing)',type:'number',   req:false, section:'build', db:'remediation_hours' },
+  { key:'buildDurNoAI',      label:'Build Duration without AI (hrs)',                 type:'number',   req:false, section:'build', db:'build_dur_no_ai' },
+  { key:'analysisTool',      label:'Productivity Tool Used for Analysis',             type:'select',   opts:TOOLS,           req:true,  section:'analysis', db:'analysis_tool' },
+  { key:'analysisJustify',   label:'Justification for Not Using Productivity Tool',   type:'textarea', req:true,  section:'analysis', db:'analysis_justify', showWhen:r=>r.analysisTool==='None', full:true },
+  { key:'analysisDurAI',     label:'Analysis Duration with AI (hrs)',                 type:'number',   req:false, section:'analysis', db:'analysis_dur_ai' },
+  { key:'analysisDurNoAI',   label:'Analysis Duration without AI (hrs)',              type:'number',   req:false, section:'analysis', db:'analysis_dur_no_ai' },
+];
+
+const SECTIONS = {
+  story:    { label:'Story Info', color:'#2563eb' },
+  build:    { label:'Build',      color:'#7c3aed' },
+  analysis: { label:'Analysis',   color:'#0891b2' },
+};
+
+const EXCEL_HEADERS = [
+  'Division','JIRA Story','Story/Task','JIRA Story Points','Developer',
+  'Productivity Tool Used for Build','Justification of not using Productivity tool (Build)',
+  'Code Generation Hours','Review Hours','Refinement Hours',
+  'Addtnl Remediation Hours (Any Manual Hours & Unit Testing Hours)',
+  'Build Duration without AI','Productivity tool used for Analysis',
+  'Justification of not using Productivity tool (Analysis)',
+  'Analysis Duration with AI','Analysis Duration without AI',
+];
+
+// Convert app row (camelCase) → DB row (snake_case)
+function toDb(r) {
+  const d = {};
+  FIELDS.forEach(f => {
+    const v = r[f.key];
+    d[f.db] = (f.type==='number' && v!=='' && v!==undefined && v!==null) ? +v : (v||null);
+  });
+  return d;
+}
+
+// Convert DB row → app row (camelCase)
+function fromDb(d) {
+  const r = {};
+  FIELDS.forEach(f => { r[f.key] = d[f.db] !== null && d[f.db] !== undefined ? String(d[f.db]) : ''; });
+  r._id = d.id;
+  r._createdAt = d.created_at;
+  return r;
+}
+
+function rowToExcel(r) {
+  return [
+    r.division, r.jira_story||r.jiraStory, r.story_task||r.storyTask,
+    r.story_points||r.storyPoints||'', r.developer,
+    r.build_tool||r.buildTool, r.build_justify||r.buildJustify||'',
+    r.code_gen_hours||r.codeGenHours||'', r.review_hours||r.reviewHours||'',
+    r.refinement_hours||r.refinementHours||'', r.remediation_hours||r.remediationHours||'',
+    r.build_dur_no_ai||r.buildDurNoAI||'', r.analysis_tool||r.analysisTool,
+    r.analysis_justify||r.analysisJustify||'',
+    r.analysis_dur_ai||r.analysisDurAI||'', r.analysis_dur_no_ai||r.analysisDurNoAI||'',
+  ];
+}
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let entries = [];
+let activeIdx = 0;
+let nextId = 1;
+let allRecords = [];
+let editingId = null;
+let editingData = {};
+let dbReady = false;
+
+function emptyEntry() { const r={id:nextId++}; FIELDS.forEach(f=>r[f.key]=''); return r; }
+
+// ══════════════════════════════════════════════════════
+// INIT — test connection
+// ══════════════════════════════════════════════════════
+entries.push(emptyEntry());
+render();
+
+(async function testConnection() {
+  try {
+    await sbFetch(TABLE + '?limit=1&select=id');
+    dbReady = true;
+    document.getElementById('dbDot').classList.add('live');
+    document.getElementById('dbStatus').textContent = 'Supabase Connected';
+    document.getElementById('btnSave').disabled = false;
+    loadTotalCount();
+  } catch(e) {
+    document.getElementById('dbDot').classList.add('error');
+    document.getElementById('dbStatus').textContent = 'Connection Error';
+    showToast('⚠ Supabase error: ' + e.message, '#dc2626');
+  }
+})();
+
+// ══════════════════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-nav-btn').forEach(b=>b.classList.remove('active'));
+  const name = tab.charAt(0).toUpperCase()+tab.slice(1);
+  document.getElementById('panel'+name).classList.add('active');
+  document.getElementById('nav'+name).classList.add('active');
+  if(tab==='search') loadAllRecords();
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════
+function render() { renderTabs(); renderForm(); updateBarInfo(); }
+
+function renderTabs() {
+  const list=document.getElementById('tabList'); list.innerHTML='';
+  entries.forEach((entry,i)=>{
+    const div=document.createElement('div');
+    div.className='tab-item'+(i===activeIdx?' active':'');
+    div.onclick=()=>{activeIdx=i;render();};
+    div.innerHTML=`<div><div class="tab-name">${entry.jiraStory||'Entry '+(i+1)}</div>${entry.developer?`<div class="tab-dev">${entry.developer}</div>`:''}</div>${entries.length>1?`<button class="tab-remove" onclick="removeLocalEntry(event,${i})">×</button>`:''}`;
+    list.appendChild(div);
+  });
+}
+
+function renderForm() {
+  const main=document.getElementById('mainArea'); const row=entries[activeIdx]; let html='';
+  const buildHrs=['codeGenHours','reviewHours','refinementHours','remediationHours'].reduce((s,k)=>s+(parseFloat(row[k])||0),0);
+  const saveBuild=(parseFloat(row.buildDurNoAI)||0)-buildHrs;
+  const saveAnalysis=(parseFloat(row.analysisDurNoAI)||0)-(parseFloat(row.analysisDurAI)||0);
+  const showSum=row.jiraStory||row.developer;
+  html+=`<div class="summary-card ${showSum?'visible':''}">
+    <div class="summary-label">Entry Summary</div>
+    <div class="summary-stats">
+      <div class="stat"><div class="stat-val">${buildHrs>0?buildHrs.toFixed(1)+'h':'—'}</div><div class="stat-name">Total Build Hours</div></div>
+      <div class="stat"><div class="stat-val ${saveBuild>0?'positive':''}">${saveBuild!==0&&row.buildDurNoAI?(saveBuild>0?'+':'')+saveBuild.toFixed(1)+'h':'—'}</div><div class="stat-name">AI Savings (Build)</div></div>
+      <div class="stat"><div class="stat-val ${saveAnalysis>0?'positive':''}">${saveAnalysis!==0&&row.analysisDurNoAI?(saveAnalysis>0?'+':'')+saveAnalysis.toFixed(1)+'h':'—'}</div><div class="stat-name">AI Savings (Analysis)</div></div>
+    </div></div>`;
+  ['story','build','analysis'].forEach(sec=>{
+    const meta=SECTIONS[sec];
+    html+=`<div class="section-card"><div class="section-head"><div class="section-bar" style="background:${meta.color}"></div><div class="section-title">${meta.label}</div></div><div class="fields-grid">`;
+    FIELDS.filter(f=>f.section===sec).forEach(f=>{
+      const hidden=f.showWhen&&!f.showWhen(row); const val=row[f.key]||'';
+      let input='';
+      if(f.type==='select'){const opts=f.opts.map(o=>`<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('');input=`<select id="f_${f.key}" onchange="updateField('${f.key}',this.value)"><option value="">— Select —</option>${opts}</select>`;}
+      else if(f.type==='textarea'){input=`<textarea id="f_${f.key}" placeholder="Please provide justification…" onchange="updateField('${f.key}',this.value)">${val}</textarea>`;}
+      else{input=`<input id="f_${f.key}" type="${f.type}" min="0" step="0.5" value="${val}" placeholder="${f.type==='number'?'0':''}" oninput="updateField('${f.key}',this.value)">`;}
+      html+=`<div class="field ${f.full?'field-full':''} ${hidden?'field-hidden':''}" id="wrap_${f.key}"><label for="f_${f.key}">${f.label}${f.req?'<span class="req">*</span>':''}</label>${input}<div class="err-msg" id="err_${f.key}">This field is required</div></div>`;
+    });
+    html+=`</div></div>`;
+  });
+  main.innerHTML=html;
+}
+
+function updateBarInfo() { document.getElementById('barInfo').textContent=entries.length+(entries.length===1?' entry':' entries')+' this session'; }
+
+function updateField(key,value) {
+  entries[activeIdx][key]=value; clearErr(key);
+  FIELDS.filter(f=>f.showWhen).forEach(f=>{
+    const wrap=document.getElementById('wrap_'+f.key); if(!wrap) return;
+    const show=f.showWhen(entries[activeIdx]);
+    wrap.classList.toggle('field-hidden',!show);
+    if(!show) entries[activeIdx][f.key]='';
+  });
+  renderTabs(); refreshSummary();
+}
+
+function refreshSummary() {
+  const row=entries[activeIdx];
+  const buildHrs=['codeGenHours','reviewHours','refinementHours','remediationHours'].reduce((s,k)=>s+(parseFloat(row[k])||0),0);
+  const saveBuild=(parseFloat(row.buildDurNoAI)||0)-buildHrs;
+  const saveAnalysis=(parseFloat(row.analysisDurNoAI)||0)-(parseFloat(row.analysisDurAI)||0);
+  const card=document.querySelector('.summary-card'); if(!card) return;
+  card.classList.toggle('visible',!!(row.jiraStory||row.developer));
+  const vals=card.querySelectorAll('.stat-val');
+  if(vals[0]) vals[0].textContent=buildHrs>0?buildHrs.toFixed(1)+'h':'—';
+  if(vals[1]){vals[1].textContent=saveBuild!==0&&row.buildDurNoAI?(saveBuild>0?'+':'')+saveBuild.toFixed(1)+'h':'—';vals[1].className='stat-val'+(saveBuild>0?' positive':'');}
+  if(vals[2]){vals[2].textContent=saveAnalysis!==0&&row.analysisDurNoAI?(saveAnalysis>0?'+':'')+saveAnalysis.toFixed(1)+'h':'—';vals[2].className='stat-val'+(saveAnalysis>0?' positive':'');}
+}
+
+function addEntry() { if(!validateEntry(activeIdx,true)) return; entries.push(emptyEntry()); activeIdx=entries.length-1; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+function removeLocalEntry(e,idx) { e.stopPropagation(); if(entries.length===1) return; entries.splice(idx,1); if(activeIdx>=entries.length) activeIdx=entries.length-1; render(); }
+
+// ══════════════════════════════════════════════════════
+// VALIDATION
+// ══════════════════════════════════════════════════════
+function validateEntry(idx,showErrors) {
+  const row=entries[idx]; let valid=true;
+  FIELDS.forEach(f=>{
+    if(!f.req) return;
+    if(f.showWhen&&!f.showWhen(row)) return;
+    if(!row[f.key]||String(row[f.key]).trim()===''){
+      if(showErrors&&idx===activeIdx) showErr(f.key,'This field is required');
+      valid=false;
+    }
+  });
+  return valid;
+}
+function showErr(key,msg){const w=document.getElementById('wrap_'+key),e=document.getElementById('err_'+key);if(w)w.classList.add('has-error');if(e)e.textContent=msg;}
+function clearErr(key){const w=document.getElementById('wrap_'+key);if(w)w.classList.remove('has-error');}
+
+// ══════════════════════════════════════════════════════
+// SAVE TO SUPABASE
+// ══════════════════════════════════════════════════════
+async function saveToSupabase() {
+  if(!dbReady){showToast('Supabase not connected','#f59e0b');return;}
+  let firstBad=-1;
+  entries.forEach((_,i)=>{if(!validateEntry(i,false)&&firstBad===-1)firstBad=i;});
+  if(firstBad!==-1){activeIdx=firstBad;render();validateEntry(firstBad,true);showToast('⚠ Fill required fields in Entry '+(firstBad+1),'#dc2626');return;}
+  showSpinner('Saving to Supabase…');
+  try {
+    const rows=entries.map(toDb);
+    await sbFetch(TABLE, { method:'POST', body:JSON.stringify(rows), headers:{'Prefer':'return=minimal'} });
+    hideSpinner();
+    showToast(`✓ ${rows.length} record${rows.length>1?'s':''} saved!`,'#16a34a');
+    loadTotalCount();
+    entries=[emptyEntry()]; activeIdx=0; render();
+  } catch(e){ hideSpinner(); showToast('✗ Save failed: '+e.message,'#dc2626'); }
+}
+
+// ══════════════════════════════════════════════════════
+// LOAD / SEARCH
+// ══════════════════════════════════════════════════════
+async function loadTotalCount() {
+  try {
+    const res = await fetch(SB_URL+'/rest/v1/'+TABLE+'?select=id', { headers:{...HEADERS,'Prefer':'count=exact'} });
+    const count = res.headers.get('content-range')?.split('/')[1] || '0';
+    document.getElementById('totalBadge').textContent = count;
+  } catch(_){}
+}
+
+async function loadAllRecords() {
+  if(!dbReady){showToast('Supabase not connected','#f59e0b');return;}
+  showSpinner('Loading records…');
+  try {
+    const data = await sbFetch(TABLE+'?order=created_at.desc&limit=500');
+    allRecords = data;
+    hideSpinner();
+    renderResults(allRecords);
+    document.getElementById('resultsCount').textContent = allRecords.length+' records';
+    document.getElementById('totalBadge').textContent = allRecords.length;
+  } catch(e){ hideSpinner(); showToast('✗ '+e.message,'#dc2626'); }
+}
+
+function doSearch() {
+  const term=document.getElementById('searchInput').value.trim().toLowerCase();
+  const field=document.getElementById('searchField').value;
+  if(!term){loadAllRecords();return;}
+  const dbFields = field==='all' ? FIELDS.map(f=>f.db) : [field];
+  const results=allRecords.filter(r=>dbFields.some(k=>String(r[k]||'').toLowerCase().includes(term)));
+  renderResults(results);
+  document.getElementById('resultsCount').textContent=results.length+' result'+(results.length!==1?'s':'')+' for "'+term+'"';
+}
+
+function renderResults(records) {
+  const tbody=document.getElementById('resultsBody');
+  if(!records.length){ tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No records found</div></div></td></tr>`; return; }
+  tbody.innerHTML=records.map(r=>`
+    <tr>
+      <td>${r.division||'—'}</td>
+      <td><strong>${r.jira_story||'—'}</strong></td>
+      <td>${r.story_task||'—'}</td>
+      <td>${r.developer||'—'}</td>
+      <td>${r.build_tool||'—'}</td>
+      <td>${r.story_points||'—'}</td>
+      <td>${r.code_gen_hours||'—'}</td>
+      <td>${r.review_hours||'—'}</td>
+      <td>${r.analysis_tool||'—'}</td>
+      <td style="font-size:11px;color:#94a3b8;">${r.created_at?new Date(r.created_at).toLocaleDateString():''}</td>
+      <td><div class="td-actions">
+        <button class="btn-edit" onclick="openEditModal('${r.id}')">✏ Edit</button>
+        <button class="btn-del" onclick="deleteRecord('${r.id}')">🗑</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// EDIT MODAL
+// ══════════════════════════════════════════════════════
+function openEditModal(id) {
+  const rec=allRecords.find(r=>r.id===id); if(!rec) return;
+  editingId=id; editingData=fromDb(rec);
+  document.getElementById('modalTitle').textContent='Edit: '+(rec.jira_story||id);
+  renderModalFields();
+  document.getElementById('editModal').classList.add('open');
+}
+
+function renderModalFields() {
+  const r=editingData; let html='';
+  ['story','build','analysis'].forEach(sec=>{
+    const meta=SECTIONS[sec];
+    html+=`<div style="margin-bottom:18px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f1f5f9;"><div style="width:4px;height:16px;border-radius:2px;background:${meta.color};flex-shrink:0"></div><span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#475569;">${meta.label}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:13px;">`;
+    FIELDS.filter(f=>f.section===sec).forEach(f=>{
+      const hidden=f.showWhen&&!f.showWhen(r); const val=r[f.key]||'';
+      let input='';
+      if(f.type==='select'){const opts=f.opts.map(o=>`<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('');input=`<select id="m_${f.key}" onchange="updateEditField('${f.key}',this.value)"><option value="">— Select —</option>${opts}</select>`;}
+      else if(f.type==='textarea'){input=`<textarea id="m_${f.key}" style="min-height:60px" placeholder="Please provide justification…" onchange="updateEditField('${f.key}',this.value)">${val}</textarea>`;}
+      else{input=`<input id="m_${f.key}" type="${f.type}" min="0" step="0.5" value="${val}" oninput="updateEditField('${f.key}',this.value)">`;}
+      html+=`<div class="field ${f.full?'field-full':''}" ${hidden?'style="display:none"':''} id="mwrap_${f.key}"><label for="m_${f.key}">${f.label}${f.req?'<span class="req">*</span>':''}</label>${input}</div>`;
+    });
+    html+=`</div></div>`;
+  });
+  document.getElementById('modalBody').innerHTML=html;
+}
+
+function updateEditField(key,value){
+  editingData[key]=value;
+  FIELDS.filter(f=>f.showWhen).forEach(f=>{
+    const wrap=document.getElementById('mwrap_'+f.key); if(!wrap) return;
+    wrap.style.display=f.showWhen(editingData)?'':'none';
+    if(!f.showWhen(editingData)) editingData[f.key]='';
+  });
+}
+
+function closeEditModal(){ document.getElementById('editModal').classList.remove('open'); editingId=null; editingData={}; }
+
+async function saveEdit(){
+  if(!editingId||!dbReady) return;
+  // Validate required fields
+  let missingField = null;
+  FIELDS.forEach(f=>{
+    if(!f.req) return;
+    if(f.showWhen&&!f.showWhen(editingData)) return;
+    if(!editingData[f.key]||String(editingData[f.key]).trim()==='') missingField=f.label;
+  });
+  if(missingField){showToast('⚠ Required: '+missingField,'#dc2626');return;}
+  showSpinner('Updating…');
+  try {
+    const data=toDb(editingData); data.updated_at=new Date().toISOString();
+    await sbFetch(TABLE+'?id=eq.'+editingId, { method:'PATCH', body:JSON.stringify(data), headers:{'Prefer':'return=minimal'} });
+    hideSpinner(); closeEditModal();
+    showToast('✓ Record updated!','#16a34a');
+    await loadAllRecords();
+  } catch(e){ hideSpinner(); showToast('✗ '+e.message,'#dc2626'); }
+}
+
+async function deleteRecord(id){
+  if(!confirm('Delete this record? This cannot be undone.')) return;
+  showSpinner('Deleting…');
+  try {
+    await sbFetch(TABLE+'?id=eq.'+id, { method:'DELETE' });
+    allRecords=allRecords.filter(r=>r.id!==id);
+    hideSpinner(); showToast('Record deleted','#64748b');
+    renderResults(allRecords);
+    document.getElementById('resultsCount').textContent=allRecords.length+' records';
+    document.getElementById('totalBadge').textContent=allRecords.length;
+  } catch(e){ hideSpinner(); showToast('✗ '+e.message,'#dc2626'); }
+}
+
+// ══════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ══════════════════════════════════════════════════════
+async function exportAllToExcel(){
+  showSpinner('Loading all records…');
+  let records;
+  try {
+    records = await sbFetch(TABLE+'?order=created_at.desc&limit=5000');
+    hideSpinner();
+  } catch(e){ hideSpinner(); showToast('✗ '+e.message,'#dc2626'); return; }
+  if(!records||!records.length){showToast('No records to export','#f59e0b');return;}
+  const wb=XLSX.utils.book_new();
+  const data=[EXCEL_HEADERS,...records.map(rowToExcel)];
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:14},{wch:16},{wch:12},{wch:14},{wch:18},{wch:22},{wch:36},{wch:18},{wch:14},{wch:18},{wch:44},{wch:24},{wch:24},{wch:36},{wch:22},{wch:24}];
+  const hStyle={font:{bold:true,color:{rgb:'FFFFFF'},sz:11},fill:{fgColor:{rgb:'1E3A5F'}},alignment:{wrapText:true,vertical:'center',horizontal:'center'},border:ba('888888')};
+  EXCEL_HEADERS.forEach((_,ci)=>{const ref=XLSX.utils.encode_cell({r:0,c:ci});if(ws[ref])ws[ref].s=hStyle;});
+  records.forEach((_,ri)=>{
+    const ds={fill:{fgColor:{rgb:ri%2===0?'EEF2FF':'FFFFFF'}},alignment:{wrapText:true,vertical:'top'},font:{sz:10},border:ba('DDDDDD')};
+    EXCEL_HEADERS.forEach((_,ci)=>{const ref=XLSX.utils.encode_cell({r:ri+1,c:ci});if(ws[ref])ws[ref].s=ds;});
+  });
+  ws['!rows']=[{hpt:40},...records.map(()=>({hpt:20}))];
+  XLSX.utils.book_append_sheet(wb,ws,'Productivity Data');
+  XLSX.writeFile(wb,`productivity_tracker_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`✓ Exported ${records.length} records to Excel`,'#16a34a');
+}
+
+function ba(hex){const s={style:'thin',color:{rgb:hex}};return{top:s,bottom:s,left:s,right:s};}
+
+// ══════════════════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════════════════
+function showSpinner(msg){document.getElementById('spinnerMsg').textContent=msg;document.getElementById('spinnerOverlay').classList.add('open');}
+function hideSpinner(){document.getElementById('spinnerOverlay').classList.remove('open');}
+function showToast(msg,bg){const t=document.getElementById('toast');t.textContent=msg;t.style.background=bg||'#16a34a';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),4000);}
+document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
+</script>
+</body>
+</html>
